@@ -31,3 +31,5 @@ cargo install --git https://github.com/woodgear/tmuxlayout.git
 * set border title
 * add clippy
 * add ci
+* add support of mutli windows
+* add support of mutli config format like json
