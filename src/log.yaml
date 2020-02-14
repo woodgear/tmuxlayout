@@ -1,0 +1,23 @@
+refresh_rate: 30 seconds
+appenders:
+  stdout:
+    encoder:
+      pattern: "{l} {d(%H:%M:%S)} {M}:{L} - {m}{n}"
+    kind: console
+  root:
+    kind: rolling_file
+    path: "log/app.log"
+    encoder:
+      pattern: "{l} {d(%H:%M:%S)} {M}:{L} - {m}{n}"
+    policy:
+      kind: compound
+      trigger:
+        kind: size
+        limit: 5 mb
+      roller:
+        kind: delete
+root:
+  level: info
+  appenders:
+    # - root
+    - stdout
