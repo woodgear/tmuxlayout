@@ -104,7 +104,7 @@ fn do_window(_name: &str, windows: &TmuxWindow, out: &mut Vec<String>) {
 fn do_pane(index: u32, pane: &TmuxPane, out: &mut Vec<String>) {
     out.push(format!("tmux selectp -t {}", index));
     if !pane.root.is_empty() {
-        out.push(format!("tmux send-keys 'cd {}' 'C-m'", pane.root));
+        out.push(format!("tmux send-keys 'cd \"{}\"' 'C-m'", pane.root));
     }
 
     for cmd in pane.cmds.iter() {
