@@ -61,7 +61,10 @@ struct TmuxPane {
 fn do_parse(layout: &TmuxLayout, out: &mut Vec<String>) {
     out.push("#!/bin/sh".to_string());
     do_preare(layout, out);
+    let total_windows_count = layout.windows.len();
+    let mut current_windows_index = 0;
     for (name, windows) in layout.windows.iter() {
+        current_windows_index += 1;
         if !layout.root.is_empty() && windows.root.is_empty() {
             let mut windows = windows.clone();
             windows.root = layout.root.clone();
@@ -69,8 +72,15 @@ fn do_parse(layout: &TmuxLayout, out: &mut Vec<String>) {
         } else {
             do_window(name, windows, out);
         }
+        let is_last_window = current_windows_index == total_windows_count;
+        if !is_last_window {
+            out.push("tmux new-window".to_string());
+        }
     }
     out.push("tmux -2 attach-session -d".to_string());
+    if layout.windows.len() > 1 {
+        out.push("tmux select-window -t 0".to_string());
+    }
 }
 
 fn do_preare(layout: &TmuxLayout, out: &mut Vec<String>) {
@@ -173,6 +183,14 @@ mod tests {
     }
 
     #[test]
+    fn test_whitespace() {
+        let yaml = r#"root: "E:\\sm\\work""#;
+        println!("debug==>  {}", yaml);
+        let v: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
+        println!("debug==> v {:?}", v);
+    }
+
+    #[test]
     fn test_layout() {
         fn assert_yaml(yaml: &str, layout: TmuxLayout) {
             let ret_layout: TmuxLayout = serde_yaml::from_str(yaml).unwrap();
@@ -268,16 +286,16 @@ tmux splitw -h
 tmux select-layout tiled
 tmux select-layout tiled
 tmux selectp -t 0
-tmux send-keys 'cd ./1' 'C-m'
+tmux send-keys 'cd "./1"' 'C-m'
 tmux send-keys 'vim' 'C-m'
 tmux selectp -t 1
-tmux send-keys 'cd ./w1' 'C-m'
+tmux send-keys 'cd "./w1"' 'C-m'
 tmux send-keys 'vim' 'C-m'
 tmux selectp -t 2
-tmux send-keys 'cd ./w1' 'C-m'
+tmux send-keys 'cd "./w1"' 'C-m'
 tmux send-keys 'vim' 'C-m'
 tmux selectp -t 3
-tmux send-keys 'cd ./w1' 'C-m'
+tmux send-keys 'cd "./w1"' 'C-m'
 tmux send-keys 'vim' 'C-m'
 tmux -2 attach-session -d"#;
 
