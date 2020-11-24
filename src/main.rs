@@ -3,7 +3,6 @@ use failure::ResultExt;
 use log::*;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use sugar::btreemap;
 
 #[context(fn)]
 fn init_log(config: &str) -> Result<(), failure::Error> {
@@ -60,11 +59,18 @@ struct TmuxPane {
 
 fn do_parse(layout: &TmuxLayout, out: &mut Vec<String>) {
     out.push("#!/bin/sh".to_string());
-    do_preare(layout, out);
-    let total_windows_count = layout.windows.len();
+    do_prepare(layout, out);
     let mut current_windows_index = 0;
     for (name, windows) in layout.windows.iter() {
         current_windows_index += 1;
+        let is_first_window = current_windows_index == 1;
+
+        if is_first_window {
+            out.push(format!(r#"tmux rename-window '{}'"#, name));
+        } else {
+            out.push(format!("tmux new-window -n '{}'",name));
+        }
+
         if !layout.root.is_empty() && windows.root.is_empty() {
             let mut windows = windows.clone();
             windows.root = layout.root.clone();
@@ -72,10 +78,7 @@ fn do_parse(layout: &TmuxLayout, out: &mut Vec<String>) {
         } else {
             do_window(name, windows, out);
         }
-        let is_last_window = current_windows_index == total_windows_count;
-        if !is_last_window {
-            out.push("tmux new-window".to_string());
-        }
+
     }
     out.push("tmux -2 attach-session -d".to_string());
     if layout.windows.len() > 1 {
@@ -83,7 +86,7 @@ fn do_parse(layout: &TmuxLayout, out: &mut Vec<String>) {
     }
 }
 
-fn do_preare(layout: &TmuxLayout, out: &mut Vec<String>) {
+fn do_prepare(layout: &TmuxLayout, out: &mut Vec<String>) {
     for c in layout.on_start.iter() {
         out.push(format!("{}", c));
     }
@@ -99,24 +102,24 @@ fn do_window(_name: &str, windows: &TmuxWindow, out: &mut Vec<String>) {
     do_preare_panel_tiled(windows.panes.len(), out);
     let mut index = 0;
 
-    for (_name, pane) in windows.panes.iter() {
+    for (name, pane) in windows.panes.iter() {
         if !windows.root.is_empty() && pane.root.is_empty() {
             let mut pane = pane.clone();
             pane.root = windows.root.clone();
-            do_pane(index, &pane, out);
+            do_pane(name, index, &pane, out);
         } else {
-            do_pane(index, pane, out);
+            do_pane(name, index, pane, out);
         }
         index = index + 1;
     }
 }
 
-fn do_pane(index: u32, pane: &TmuxPane, out: &mut Vec<String>) {
+fn do_pane(name: &str, index: u32, pane: &TmuxPane, out: &mut Vec<String>) {
     out.push(format!("tmux selectp -t {}", index));
     if !pane.root.is_empty() {
         out.push(format!("tmux send-keys 'cd \"{}\"' 'C-m'", pane.root));
     }
-
+    out.push(format!("tmux select-pane -T '{}'", name));
     for cmd in pane.cmds.iter() {
         out.push(format!("tmux send-keys '{}' 'C-m'", cmd));
     }
@@ -140,6 +143,7 @@ fn parse(yml: &str) -> Result<Vec<String>, failure::Error> {
     let _ret = do_parse(&layout, &mut out);
     return Ok(out);
 }
+
 use std::fs;
 use structopt::StructOpt;
 #[derive(StructOpt, Debug)]
@@ -172,11 +176,14 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
+    use sugar::btreemap;
+
     use super::*;
 
     fn assert_parse(yaml: &str, bash: &str) {
         let bash: Vec<String> = bash.lines().map(|s| s.to_string()).collect();
         let ret_bash = parse(yaml).unwrap();
+        println!("debug==>  {}", ret_bash.join("\n"));
         for i in 0..ret_bash.len() {
             assert_eq!(bash[i], ret_bash[i]);
         }
@@ -279,6 +286,7 @@ windows:
 echo "start"
 tmux kill-session -t sample
 tmux new-session -d -s sample
+tmux rename-window 'window-1'
 tmux splitw -h
 tmux select-layout tiled
 tmux splitw -h
@@ -287,15 +295,19 @@ tmux select-layout tiled
 tmux select-layout tiled
 tmux selectp -t 0
 tmux send-keys 'cd "./1"' 'C-m'
+tmux select-pane -T 'panel-1'
 tmux send-keys 'vim' 'C-m'
 tmux selectp -t 1
 tmux send-keys 'cd "./w1"' 'C-m'
+tmux select-pane -T 'panel-2'
 tmux send-keys 'vim' 'C-m'
 tmux selectp -t 2
 tmux send-keys 'cd "./w1"' 'C-m'
+tmux select-pane -T 'panel-3'
 tmux send-keys 'vim' 'C-m'
 tmux selectp -t 3
 tmux send-keys 'cd "./w1"' 'C-m'
+tmux select-pane -T 'panel-4'
 tmux send-keys 'vim' 'C-m'
 tmux -2 attach-session -d"#;
 
@@ -322,10 +334,5 @@ tmux splitw -h
 tmux select-layout tiled
 tmux select-layout tiled"#,
         );
-        // assert_preare_panel_tiled(1,r#"tmux select-layout tiled"#);
-
-        // assert_preare_panel_tiled(2,r#"tmux splitw -h
-        // tmux select-layout tiled
-        // "#);
     }
 }
