@@ -8,13 +8,15 @@
 name: session_name
 restart_if_exists: true
 windows:
-    harpon:
+    windows_name:
         panes:
-            1-p1:
+            pane-name1:
                 root: ./p1
+                env:
+                    a:b
                 cmds:
-                    - echo "p1"
-            2-p2:
+                    - echo $a
+            pane-name2:
                 root: ./p2
                 cmds:
                     - echo "p2"

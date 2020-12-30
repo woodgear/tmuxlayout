@@ -2,7 +2,8 @@ use context_attribute::context;
 use failure::ResultExt;
 use log::*;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
+use sugars::hmap;
 
 #[context(fn)]
 fn init_log(config: &str) -> Result<(), failure::Error> {
@@ -54,6 +55,8 @@ struct TmuxPane {
     #[serde(default)]
     root: String,
     #[serde(default)]
+    env: HashMap<String, String>,
+    #[serde(default)]
     cmds: Vec<String>,
 }
 
@@ -68,7 +71,7 @@ fn do_parse(layout: &TmuxLayout, out: &mut Vec<String>) {
         if is_first_window {
             out.push(format!(r#"tmux rename-window '{}'"#, name));
         } else {
-            out.push(format!("tmux new-window -n '{}'",name));
+            out.push(format!("tmux new-window -n '{}'", name));
         }
 
         if !layout.root.is_empty() && windows.root.is_empty() {
@@ -78,7 +81,6 @@ fn do_parse(layout: &TmuxLayout, out: &mut Vec<String>) {
         } else {
             do_window(name, windows, out);
         }
-
     }
     out.push("tmux -2 attach-session -d".to_string());
     if layout.windows.len() > 1 {
@@ -120,10 +122,15 @@ fn do_pane(name: &str, index: u32, pane: &TmuxPane, out: &mut Vec<String>) {
         out.push(format!("tmux send-keys 'cd \"{}\"' 'C-m'", pane.root));
     }
     out.push(format!("tmux select-pane -T '{}'", name));
+    for (key, val) in &pane.env {
+        out.push(format!("tmux send-keys 'export {}={}' 'C-m'", key, val));
+    }
+
     for cmd in pane.cmds.iter() {
         out.push(format!("tmux send-keys '{}' 'C-m'", cmd));
     }
 }
+
 fn do_preare_panel_tiled(pane_count: usize, out: &mut Vec<String>) {
     if pane_count > 1 {
         for i in 0..pane_count - 1 {
@@ -169,7 +176,7 @@ fn app() -> Result<(), failure::Error> {
 
 fn main() {
     if let Err(e) = app() {
-        println!("{:?}", e);
+        error!("{:?}", e);
         std::process::exit(-1);
     }
 }
@@ -183,18 +190,9 @@ mod tests {
     fn assert_parse(yaml: &str, bash: &str) {
         let bash: Vec<String> = bash.lines().map(|s| s.to_string()).collect();
         let ret_bash = parse(yaml).unwrap();
-        println!("debug==>  {}", ret_bash.join("\n"));
         for i in 0..ret_bash.len() {
             assert_eq!(bash[i], ret_bash[i]);
         }
-    }
-
-    #[test]
-    fn test_whitespace() {
-        let yaml = r#"root: "E:\\sm\\work""#;
-        println!("debug==>  {}", yaml);
-        let v: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
-        println!("debug==> v {:?}", v);
     }
 
     #[test]
@@ -211,6 +209,9 @@ windows:
     window-1:
         panes:
             panel-1:
+                env: 
+                    ENVA: b
+                    ENVB: 10
                 root: ./1
                 cmds:
                     - echo "a1"
@@ -236,14 +237,17 @@ windows:
                         panes:btreemap!{
                             "panel-1".to_string() => TmuxPane{
                                 root:"./1".to_string(),
+                                env:hmap!{"ENVA".to_string()=>"b".to_string(), "ENVB".to_string()=> "10".to_string()},
                                 cmds:vec![r#"echo "a1""#.to_string(),r#"echo "b1""#.to_string()]
                             },
                             "panel-2".to_string() => TmuxPane{
                                 root:"".to_string(),
+                                env:Default::default(),
                                 cmds:vec![r#"echo "a2""#.to_string(),r#"echo "b2""#.to_string()]
                             },
                             "panel-3".to_string() => TmuxPane{
                                 root:"./3".to_string(),
+                                env:Default::default(),
                                 cmds:vec![]
                             }
 
@@ -268,6 +272,8 @@ windows:
         root: ./w1
         panes:                        
            panel-1:  
+                env:
+                    a: b
                 root: ./1              
                 cmds:
                     - vim
@@ -296,6 +302,7 @@ tmux select-layout tiled
 tmux selectp -t 0
 tmux send-keys 'cd "./1"' 'C-m'
 tmux select-pane -T 'panel-1'
+tmux send-keys 'export a=b' 'C-m'
 tmux send-keys 'vim' 'C-m'
 tmux selectp -t 1
 tmux send-keys 'cd "./w1"' 'C-m'
@@ -311,7 +318,6 @@ tmux select-pane -T 'panel-4'
 tmux send-keys 'vim' 'C-m'
 tmux -2 attach-session -d"#;
 
-        let _ret = parse(example_config).unwrap();
         assert_parse(example_config, expect_bash);
     }
 
