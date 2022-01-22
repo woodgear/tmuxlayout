@@ -7,12 +7,16 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-failure = "0.1.6"
+failure = "0.1.8"
 log = "0.4.8"
-log4rs = "0.10.0"
+log4rs = "1.0.0"
 serde_yaml = "0.8.11"
 serde = { version = "1.0", features = ["derive"] }
 sugar = { git = "https://github.com/harryfei/sugar-rs.git" }
 context-attribute = { git = "https://github.com/woodgear/context-attribute" ,branch="feature/custom-msg"}
 structopt = "0.3.9"
 sugars = "3.0.0"
+clap = { version = "3.0.10", features = ["derive"] }
+tempfile = "3.3.0"
+filepath = "0.1.1"
+

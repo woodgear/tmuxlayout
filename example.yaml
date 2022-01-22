@@ -1,0 +1,20 @@
+name: sample
+root: ~/
+restart_if_exists: true
+windows:
+    window-1:
+        panes:
+            panel-1:
+                env: 
+                    ENVA: b
+                    ENVB: 10
+                cmds:
+                    - echo "a1"
+                    - echo "b1"
+            panel-2:
+                cmds:
+                    - echo "a2"
+                    - echo "b2"        
+            panel-3:
+                cmds:
+                    - echo "a3"
