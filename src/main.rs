@@ -1,19 +1,18 @@
+use clap::Parser;
 use context_attribute::context;
 use failure::ResultExt;
+use filepath::FilePath;
 use log::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
-use sugars::hmap;
-use clap::Parser;
-use tempfile::tempfile;
 use std::process::Command;
-use filepath::FilePath;
-
+use sugars::hmap;
+use tempfile::tempfile;
 
 #[context(fn)]
 fn init_log(config: &str) -> Result<(), failure::Error> {
     use log4rs::{
-        config::{Config,RawConfig,Deserializers},
+        config::{Config, Deserializers, RawConfig},
         Logger,
     };
 
@@ -120,6 +119,17 @@ fn do_window(_name: &str, windows: &TmuxWindow, out: &mut Vec<String>) {
     }
 }
 
+fn send_keys(cmd: &str) -> String {
+    return format!(
+        r#"cmd=$(cat <<EOF
+{}
+EOF
+); tmux send-keys "$cmd" 'C-m'
+    "#,
+        cmd
+    );
+}
+
 fn do_pane(name: &str, index: u32, pane: &TmuxPane, out: &mut Vec<String>) {
     out.push(format!("tmux selectp -t {}", index));
     if !pane.root.is_empty() {
@@ -131,7 +141,7 @@ fn do_pane(name: &str, index: u32, pane: &TmuxPane, out: &mut Vec<String>) {
     }
 
     for cmd in pane.cmds.iter() {
-        out.push(format!("tmux send-keys '{}' 'C-m'", cmd));
+        out.push(send_keys(cmd));
     }
 }
 
@@ -148,7 +158,6 @@ fn do_preare_panel_tiled(pane_count: usize, out: &mut Vec<String>) {
     out.push("tmux select-layout tiled".to_string());
 }
 
-
 use std::fs;
 use structopt::StructOpt;
 #[derive(StructOpt, Debug)]
@@ -162,7 +171,6 @@ struct Config {
     run: bool,
 }
 
-
 use std::path::Path;
 fn app() -> Result<(), failure::Error> {
     init_log(std::include_str!("./log.yaml"))?;
@@ -173,19 +181,32 @@ fn app() -> Result<(), failure::Error> {
     let yml = fs::read_to_string(&path)?;
 
     let layout: TmuxLayout = serde_yaml::from_str(&yml)?;
-    let mut cmds= vec![];
+    let mut cmds = vec![];
     do_parse(&layout, &mut cmds);
 
     let bash = cmds.join("\n");
     if !config.out {
-        bash_path=tempfile()?.path()?
+        bash_path = tempfile()?.path()?
     }
-    
+
     fs::write(bash_path.clone(), bash)?;
-    Command::new("chmod").args(["a+x".to_string(),bash_path.clone().into_os_string().to_string_lossy().to_string()]).spawn()?.wait();
+    Command::new("chmod")
+        .args([
+            "a+x".to_string(),
+            bash_path
+                .clone()
+                .into_os_string()
+                .to_string_lossy()
+                .to_string(),
+        ])
+        .spawn()?
+        .wait();
     if config.run {
         Command::new(bash_path).spawn()?.wait();
-        Command::new("tmux").args(["attach","-dt",&layout.name]).spawn()?.wait();
+        Command::new("tmux")
+            .args(["attach", "-dt", &layout.name])
+            .spawn()?
+            .wait();
     }
 
     Ok(())
@@ -205,19 +226,22 @@ mod tests {
     use super::*;
 
     fn assert_parse(yaml: &str, bash: &str) {
-        let bash: Vec<String> = bash.lines().map(|s| s.to_string()).collect();
-
         let ret_bash = parse(yaml).unwrap();
-        for i in 0..ret_bash.len() {
-            assert_eq!(bash[i], ret_bash[i]);
-        }
+        println!("{}", ret_bash.join("\n"));
+        assert_eq!(bash, ret_bash.join("\n"));
+        // let bash: Vec<String> = bash.lines().map(|s| s.to_string()).collect();
+
+        // let ret_bash = parse(yaml).unwrap();
+        // for i in 0..ret_bash.len() {
+        //     assert_eq!(bash[i], ret_bash[i]);
+        // }
     }
-fn parse(yml: &str) -> Result<Vec<String>, failure::Error> {
-    let layout: TmuxLayout = serde_yaml::from_str(yml)?;
-    let mut out = vec![];
-    let _ret = do_parse(&layout, &mut out);
-    return Ok(out);
-}
+    fn parse(yml: &str) -> Result<Vec<String>, failure::Error> {
+        let layout: TmuxLayout = serde_yaml::from_str(yml)?;
+        let mut out = vec![];
+        let _ret = do_parse(&layout, &mut out);
+        return Ok(out);
+    }
 
     #[test]
     fn test_layout() {
@@ -304,12 +328,6 @@ windows:
            panel-2:                
                 cmds:
                     - vim
-           panel-3:                
-                cmds:
-                    - vim
-           panel-4:                
-                cmds:
-                    - vim
 
 "#;
         let expect_bash = r#"#!/bin/sh
@@ -319,27 +337,24 @@ tmux new-session -d -s sample
 tmux rename-window 'window-1'
 tmux splitw -h
 tmux select-layout tiled
-tmux splitw -h
-tmux splitw -h
-tmux select-layout tiled
 tmux select-layout tiled
 tmux selectp -t 0
 tmux send-keys 'cd ./1' 'C-m'
 tmux select-pane -T 'panel-1'
 tmux send-keys 'export a=b' 'C-m'
-tmux send-keys 'vim' 'C-m'
+cmd=$(cat <<EOF
+vim
+EOF
+); tmux send-keys "$cmd" 'C-m'
+    
 tmux selectp -t 1
 tmux send-keys 'cd ./w1' 'C-m'
 tmux select-pane -T 'panel-2'
-tmux send-keys 'vim' 'C-m'
-tmux selectp -t 2
-tmux send-keys 'cd ./w1' 'C-m'
-tmux select-pane -T 'panel-3'
-tmux send-keys 'vim' 'C-m'
-tmux selectp -t 3
-tmux send-keys 'cd ./w1' 'C-m'
-tmux select-pane -T 'panel-4'
-tmux send-keys 'vim' 'C-m'"#;
+cmd=$(cat <<EOF
+vim
+EOF
+); tmux send-keys "$cmd" 'C-m'
+    "#;
 
         assert_parse(example_config, expect_bash);
     }
@@ -363,5 +378,19 @@ tmux splitw -h
 tmux select-layout tiled
 tmux select-layout tiled"#,
         );
+    }
+    #[test]
+    fn test_send_keys() {
+        let cmd = r#"tmux-send-key-to-pane "eyes" C-c  '  sudo bpftrace -v  ./actions/http-handle-event.trace' C-m"#;
+        let ret = send_keys(cmd);
+        println!("{}", ret);
+        assert_eq!(
+            ret,
+            r#"cmd=$(cat <<EOF
+tmux-send-key-to-pane "eyes" C-c  '  sudo bpftrace -v  ./actions/http-handle-event.trace' C-m
+EOF
+); tmux send-keys "$cmd" 'C-m'
+    "#
+        )
     }
 }
